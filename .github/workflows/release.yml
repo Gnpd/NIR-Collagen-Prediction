@@ -1,0 +1,96 @@
+name: Release
+
+# Triggers on version tags (e.g. v1.0.0) pushed to the repository.
+# Creates a GitHub Release and uploads one executable per platform.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write  # required to create GitHub Releases
+
+jobs:
+  build:
+    name: Build — ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false  # let other platforms finish even if one fails
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: nir-collagen-api-windows.exe
+
+          - os: macos-latest
+            artifact: nir-collagen-api-macos
+
+          - os: ubuntu-22.04
+            artifact: nir-collagen-api-linux
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r api/requirements.txt pyinstaller
+
+      # --add-data separator is ':' on Unix and ';' on Windows
+      - name: Build executable (Linux / macOS)
+        if: runner.os != 'Windows'
+        working-directory: api
+        run: |
+          pyinstaller --onefile \
+            --name nir-collagen-api \
+            --add-data "plsr_2045.json:." \
+            --add-data "rf_2045.json:." \
+            --hidden-import uvicorn.logging \
+            --hidden-import uvicorn.loops \
+            --hidden-import uvicorn.loops.auto \
+            --hidden-import uvicorn.protocols \
+            --hidden-import uvicorn.protocols.http \
+            --hidden-import uvicorn.protocols.http.auto \
+            --hidden-import uvicorn.protocols.websockets \
+            --hidden-import uvicorn.protocols.websockets.auto \
+            --hidden-import uvicorn.lifespan \
+            --hidden-import uvicorn.lifespan.on \
+            --collect-all chemotools \
+            --collect-all openmodels \
+            main.py
+
+      - name: Build executable (Windows)
+        if: runner.os == 'Windows'
+        working-directory: api
+        shell: pwsh
+        run: |
+          pyinstaller --onefile `
+            --name nir-collagen-api `
+            --add-data "plsr_2045.json;." `
+            --add-data "rf_2045.json;." `
+            --hidden-import uvicorn.logging `
+            --hidden-import uvicorn.loops `
+            --hidden-import uvicorn.loops.auto `
+            --hidden-import uvicorn.protocols `
+            --hidden-import uvicorn.protocols.http `
+            --hidden-import uvicorn.protocols.http.auto `
+            --hidden-import uvicorn.protocols.websockets `
+            --hidden-import uvicorn.protocols.websockets.auto `
+            --hidden-import uvicorn.lifespan `
+            --hidden-import uvicorn.lifespan.on `
+            --collect-all chemotools `
+            --collect-all openmodels `
+            main.py
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          ext=${{ runner.os == 'Windows' && '.exe' || '' }}
+          mv "api/dist/nir-collagen-api${ext}" "api/dist/${{ matrix.artifact }}"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: api/dist/${{ matrix.artifact }}
