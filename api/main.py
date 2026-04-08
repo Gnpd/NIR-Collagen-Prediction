@@ -246,6 +246,14 @@ def _predict_batch(
     )
 
 
+@app.get("/", include_in_schema=False)
+def health():
+    return {
+        "status": "ok",
+        "message": "NIR Collagen Prediction API is running. Visit /docs for the interactive documentation.",
+    }
+
+
 @app.post(
     "/predict/plsr",
     response_model=BatchPredictionResponse,

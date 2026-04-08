@@ -92,6 +92,35 @@ The notebook is self-contained: all preprocessing, modelling, and evaluation ste
 
 ---
 
+## Prediction API
+
+The serialized models are also available as a REST API, so you can predict collagen yield directly from your own spectra without running the notebook.
+
+**Try it online** — no installation needed:
+
+[![API Docs](https://img.shields.io/badge/API-docs-blue)](https://collagen-prediction.fastapicloud.dev/docs)
+
+```
+https://collagen-prediction.fastapicloud.dev
+```
+
+**Run it locally** — download the pre-built executable for your platform from the [Releases page](https://github.com/Gnpd/NIR-Collagen-Prediction/releases) and run it:
+
+```bash
+# macOS / Linux
+chmod +x nir-collagen-api-macos   # or nir-collagen-api-linux
+./nir-collagen-api-macos
+
+# Windows
+nir-collagen-api-windows.exe
+```
+
+Then open `http://localhost:8000/docs` to explore the endpoints interactively.
+
+The API accepts spectra as JSON (single or batch) or as a CSV file upload, and supports both pseudo-absorbance and raw reflectance inputs.
+
+---
+
 ## Key Results Reproduced
 
 - The 2030–2060 nm range delivers the best balance between parsimony and accuracy (1 PLSR factor, Val R² ≈ 0.88, Val RMSE ≈ 1.78%).
