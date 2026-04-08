@@ -42,6 +42,7 @@ jobs:
       - name: Build executable (Linux / macOS)
         if: runner.os != 'Windows'
         working-directory: api
+        shell: bash
         run: |
           pyinstaller --onefile \
             --name nir-collagen-api \
