@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   build:
-    name: Build â€” ${{ matrix.os }}
+    name: Build — ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -38,54 +38,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r api/requirements.txt pyinstaller
 
-      # --add-data separator is ':' on Unix and ';' on Windows
-      - name: Build executable (Linux / macOS)
-        if: runner.os != 'Windows'
+      - name: Build executable
         working-directory: api
-        shell: bash
-        run: |
-          pyinstaller --onefile \
-            --name nir-collagen-api \
-            --add-data "plsr_2045.json:." \
-            --add-data "rf_2045.json:." \
-            --hidden-import uvicorn.logging \
-            --hidden-import uvicorn.loops \
-            --hidden-import uvicorn.loops.auto \
-            --hidden-import uvicorn.protocols \
-            --hidden-import uvicorn.protocols.http \
-            --hidden-import uvicorn.protocols.http.auto \
-            --hidden-import uvicorn.protocols.websockets \
-            --hidden-import uvicorn.protocols.websockets.auto \
-            --hidden-import uvicorn.lifespan \
-            --hidden-import uvicorn.lifespan.on \
-            --hidden-import multipart 
-            --collect-all chemotools \
-            --collect-all openmodels \
-            main.py
-
-      - name: Build executable (Windows)
-        if: runner.os == 'Windows'
-        working-directory: api
-        shell: pwsh
-        run: |
-          pyinstaller --onefile `
-            --name nir-collagen-api `
-            --add-data "plsr_2045.json;." `
-            --add-data "rf_2045.json;." `
-            --hidden-import uvicorn.logging `
-            --hidden-import uvicorn.loops `
-            --hidden-import uvicorn.loops.auto `
-            --hidden-import uvicorn.protocols `
-            --hidden-import uvicorn.protocols.http `
-            --hidden-import uvicorn.protocols.http.auto `
-            --hidden-import uvicorn.protocols.websockets `
-            --hidden-import uvicorn.protocols.websockets.auto `
-            --hidden-import uvicorn.lifespan `
-            --hidden-import uvicorn.lifespan.on `
-            --hidden-import multipart `
-            --collect-all chemotools `
-            --collect-all openmodels `
-            main.py
+        run: python build.py
 
       - name: Rename artifact
         shell: bash
