@@ -98,19 +98,3 @@ The notebook is self-contained: all preprocessing, modelling, and evaluation ste
 - Restricting the spectral range to 2030–2060 nm avoids PVA consolidant absorption wavelengths (2135, 2250, 2296 nm), making the model robust for archaeological collections.
 - Random Forest (780–2500 nm) achieves the lowest LOO-CV RMSE (≈ 1.35%) but requires the full spectral range.
 
----
-
-## Reference
-
-```bibtex
-@article{ryder2026nir,
-  title   = {Refining near-infrared spectroscopy for collagen quantification:
-             A new predictive model for archaeological bone},
-  author  = {Ryder, C. and others},
-  journal = {Journal of Archaeological Science},
-  volume  = {185},
-  pages   = {106448},
-  year    = {2026},
-  doi     = {10.1016/j.jas.2025.106448}
-}
-```

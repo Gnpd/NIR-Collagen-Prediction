@@ -57,6 +57,7 @@ jobs:
             --hidden-import uvicorn.protocols.websockets.auto \
             --hidden-import uvicorn.lifespan \
             --hidden-import uvicorn.lifespan.on \
+            --hidden-import multipart 
             --collect-all chemotools \
             --collect-all openmodels \
             main.py
@@ -80,6 +81,7 @@ jobs:
             --hidden-import uvicorn.protocols.websockets.auto `
             --hidden-import uvicorn.lifespan `
             --hidden-import uvicorn.lifespan.on `
+            --hidden-import multipart `
             --collect-all chemotools `
             --collect-all openmodels `
             main.py
