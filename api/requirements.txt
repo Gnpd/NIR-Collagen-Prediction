@@ -2,7 +2,7 @@ fastapi[standard]
 numpy>=2.2
 pandas>=2.2
 matplotlib>=3.10
-scikit-learn>=1.6
+scikit-learn==1.7.1
 chemotools
 openmodels
 fastapi>=0.115
