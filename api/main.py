@@ -20,7 +20,8 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from openmodels import SerializationManager, SklearnSerializer
-from chemotools.utils.discovery import all_estimators
+from chemotools.derivative import SavitzkyGolay
+from chemotools.feature_selection import RangeCut
 from pydantic import BaseModel, field_validator
 
 # ---------------------------------------------------------------------------
@@ -98,7 +99,12 @@ async def lifespan(app: FastAPI):
     # sys._MEIPASS is set by PyInstaller when running as a frozen executable;
     # model JSON files are bundled there via --add-data.
     base_dir = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).parent
-    serializer = SklearnSerializer(custom_estimators=all_estimators)
+
+    _CHEMOTOOLS_ESTIMATORS = {
+        "SavitzkyGolay": SavitzkyGolay,
+        "RangeCut": RangeCut,
+    }
+    serializer = SklearnSerializer(custom_estimators=_CHEMOTOOLS_ESTIMATORS)
     manager = SerializationManager(serializer)
 
     for key, filename in [("plsr", "plsr_2045.json"), ("rf", "rf_2045.json")]:
