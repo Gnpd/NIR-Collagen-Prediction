@@ -170,7 +170,7 @@ All endpoints return a `BatchPredictionResponse` with one prediction per spectru
 
 For feedback, questions, or collaborations → [let's connect](https://www.linkedin.com/in/alejandro-gutierrez-99404123/)
 """,
-    version="1.0.4",
+    version="1.0.5",
     lifespan=lifespan,
 )
 
