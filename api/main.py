@@ -7,8 +7,9 @@ Exposes four endpoints:
   POST /predict/plsr/csv  — PLSR model (CSV file upload, one spectrum per row)
   POST /predict/rf/csv    — Random Forest model (CSV file upload, one spectrum per row)
 
-Both models were serialized with openmodels and expect raw pseudo-absorbance
-[log(1/R)] for 2151 wavelengths (350–2500 nm, 1 nm step) as input.
+Both models were serialized with openmodels and accept raw reflectance for
+2151 wavelengths (350–2500 nm, 1 nm step). The conversion to pseudo-absorbance
+and all spectral preprocessing are handled inside the pipeline.
 """
 
 import io
@@ -22,6 +23,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from openmodels import SerializationManager, SklearnSerializer
 from chemotools.derivative import SavitzkyGolay
 from chemotools.feature_selection import RangeCut
+from chemotools.physics import IntensityConversion
 from pydantic import BaseModel, field_validator
 
 # ---------------------------------------------------------------------------
@@ -43,13 +45,12 @@ class SpectrumRequest(BaseModel):
     - A **single spectrum**: a flat list of 2151 floats.
     - **Multiple spectra**: a list of lists, each inner list being 2151 floats.
 
-    By default the values are interpreted as pseudo-absorbance [log(1/R)].
-    Set ``raw_reflectance=true`` to supply raw reflectance (0–1); the API
-    will apply the log(1/R) conversion automatically.
+    Values must be raw reflectance (0–1, 350–2500 nm at 1 nm steps).
+    The pipeline handles the reflectance → pseudo-absorbance conversion internally.
+    Non-positive values are clipped to 1e-6 and reported as warnings.
     """
 
     reflectance: list[float] | list[list[float]]
-    raw_reflectance: bool = False
 
     @field_validator("reflectance")
     @classmethod
@@ -103,6 +104,7 @@ async def lifespan(app: FastAPI):
     _CHEMOTOOLS_ESTIMATORS = {
         "SavitzkyGolay": SavitzkyGolay,
         "RangeCut": RangeCut,
+        "IntensityConversion": IntensityConversion,
     }
     serializer = SklearnSerializer(custom_estimators=_CHEMOTOOLS_ESTIMATORS)
     manager = SerializationManager(serializer)
@@ -149,11 +151,11 @@ collagen absorption band while avoiding PVA consolidant peaks at 2135, 2250 and 
 
 ## Input
 
-Each spectrum must cover **350–2500 nm at 1 nm steps (2151 values)**.
+Each spectrum must cover **350–2500 nm at 1 nm steps (2151 values)** as **raw reflectance (0–1)**.
 
-Values can be supplied as:
-- **Pseudo-absorbance** `log(1/R)` — default, expected by the model pipeline.
-- **Raw reflectance** (0–1) — set `raw_reflectance=true` and the API converts automatically.
+The pipeline handles reflectance → pseudo-absorbance conversion internally via
+`chemotools.physics.IntensityConversion`. Non-positive values are clipped to 1e-6
+and reported in the response `warnings` field.
 
 ## Endpoints
 
@@ -170,17 +172,18 @@ All endpoints return a `BatchPredictionResponse` with one prediction per spectru
 
 For feedback, questions, or collaborations → [let's connect](https://www.linkedin.com/in/alejandro-gutierrez-99404123/)
 """,
-    version="1.0.5",
+    version="1.1.0",
     lifespan=lifespan,
 )
 
 
-def _to_absorbance(
+def _clip_reflectance(
     X: np.ndarray, sample_names: list[str] | None = None
 ) -> tuple[np.ndarray, list[str]]:
-    """Convert raw reflectance to pseudo-absorbance log(1/R).
+    """Clip non-positive reflectance values to 1e-6 before pipeline ingestion.
 
-    Values <= 0 are clipped to 1e-6 (instrument noise at spectrum edges).
+    IntensityConversion (inside the pipeline) warns on non-positive inputs but
+    does not clip them, which would propagate NaN. Clipping here prevents that.
     Affected samples are reported as warnings rather than raising an error.
     """
     warnings: list[str] = []
@@ -195,7 +198,7 @@ def _to_absorbance(
                 f"(likely instrument noise at spectrum edges)."
             )
         X = np.where(mask, 1e-6, X)
-    return np.log(1.0 / X), warnings
+    return X, warnings
 
 
 def _parse_csv(content: bytes) -> tuple[np.ndarray, list[str]]:
@@ -267,25 +270,18 @@ def health():
     description="""
 Predict collagen yield (%) from NIR spectra using the PLSR model.
 
-**Pipeline:** Savitzky-Golay 2nd-derivative → RangeCut 2030–2060 nm → PLSRegression (1 component).
+**Pipeline:** IntensityConversion → Savitzky-Golay 2nd-derivative → RangeCut 2030–2060 nm → PLSRegression (1 component).
 
 **`reflectance` field** — two formats accepted:
 - A flat list of 2151 floats for a single spectrum: `[v1, v2, ..., v2151]`
 - A list of lists for multiple spectra: `[[v1, ...], [v1, ...], ...]`
 
-Each spectrum must cover 350–2500 nm at 1 nm steps (2151 values).
-
-**`raw_reflectance` field:**
-- `false` (default): values are already pseudo-absorbance `log(1/R)`.
-- `true`: values are raw reflectance (0–1); `log(1/R)` is applied automatically.
-  Values ≤ 0 are clipped to 1e-6 and reported in `warnings`.
+Each spectrum must cover 350–2500 nm at 1 nm steps (2151 values) as **raw reflectance (0–1)**.
+Non-positive values are clipped to 1e-6 and reported in `warnings`.
 """,
 )
 def predict_plsr(body: SpectrumRequest) -> BatchPredictionResponse:
-    X = body.to_array()
-    warnings = []
-    if body.raw_reflectance:
-        X, warnings = _to_absorbance(X)
+    X, warnings = _clip_reflectance(body.to_array())
     return _predict_batch("plsr", X, warnings=warnings)
 
 
@@ -296,25 +292,18 @@ def predict_plsr(body: SpectrumRequest) -> BatchPredictionResponse:
     description="""
 Predict collagen yield (%) from NIR spectra using the Random Forest model.
 
-**Pipeline:** Savitzky-Golay 2nd-derivative → RangeCut 2030–2060 nm → RandomForestRegressor (500 trees).
+**Pipeline:** IntensityConversion → Savitzky-Golay 2nd-derivative → RangeCut 2030–2060 nm → RandomForestRegressor (500 trees).
 
 **`reflectance` field** — two formats accepted:
 - A flat list of 2151 floats for a single spectrum: `[v1, v2, ..., v2151]`
 - A list of lists for multiple spectra: `[[v1, ...], [v1, ...], ...]`
 
-Each spectrum must cover 350–2500 nm at 1 nm steps (2151 values).
-
-**`raw_reflectance` field:**
-- `false` (default): values are already pseudo-absorbance `log(1/R)`.
-- `true`: values are raw reflectance (0–1); `log(1/R)` is applied automatically.
-  Values ≤ 0 are clipped to 1e-6 and reported in `warnings`.
+Each spectrum must cover 350–2500 nm at 1 nm steps (2151 values) as **raw reflectance (0–1)**.
+Non-positive values are clipped to 1e-6 and reported in `warnings`.
 """,
 )
 def predict_rf(body: SpectrumRequest) -> BatchPredictionResponse:
-    X = body.to_array()
-    warnings = []
-    if body.raw_reflectance:
-        X, warnings = _to_absorbance(X)
+    X, warnings = _clip_reflectance(body.to_array())
     return _predict_batch("rf", X, warnings=warnings)
 
 
@@ -325,29 +314,23 @@ def predict_rf(body: SpectrumRequest) -> BatchPredictionResponse:
     description="""
 Predict collagen yield (%) from NIR spectra supplied as a CSV file, using the PLSR model.
 
-**Pipeline:** Savitzky-Golay 2nd-derivative → RangeCut 2030–2060 nm → PLSRegression (1 component).
+**Pipeline:** IntensityConversion → Savitzky-Golay 2nd-derivative → RangeCut 2030–2060 nm → PLSRegression (1 component).
 
 **CSV format:**
 - **Row 0 (header):** wavenumber labels (first cell is ignored).
 - **Column 0:** sample names — included in the response as `sample`.
-- **Remaining cells:** spectral intensities, exactly **2151 columns** (wavelengths 350–2500 nm, 1 nm step).
+- **Remaining cells:** raw reflectance (0–1), exactly **2151 columns** (wavelengths 350–2500 nm, 1 nm step).
 
-**`raw_reflectance` query parameter:**
-- `false` (default): values are already pseudo-absorbance `log(1/R)`.
-- `true`: values are raw reflectance (0–1); `log(1/R)` is applied automatically.
-  Values ≤ 0 are clipped to 1e-6 and reported in `warnings`.
+Non-positive values are clipped to 1e-6 and reported in `warnings`.
 
 Returns one prediction per spectrum, the total sample count, and any clipping warnings.
 """,
 )
 async def predict_plsr_csv(
     file: UploadFile = File(...),
-    raw_reflectance: bool = False,
 ) -> BatchPredictionResponse:
     X, names = _parse_csv(await file.read())
-    warnings = []
-    if raw_reflectance:
-        X, warnings = _to_absorbance(X, names)
+    X, warnings = _clip_reflectance(X, names)
     return _predict_batch("plsr", X, names, warnings)
 
 
@@ -358,29 +341,23 @@ async def predict_plsr_csv(
     description="""
 Predict collagen yield (%) from NIR spectra supplied as a CSV file, using the Random Forest model.
 
-**Pipeline:** Savitzky-Golay 2nd-derivative → RangeCut 2030–2060 nm → RandomForestRegressor (500 trees).
+**Pipeline:** IntensityConversion → Savitzky-Golay 2nd-derivative → RangeCut 2030–2060 nm → RandomForestRegressor (500 trees).
 
 **CSV format:**
 - **Row 0 (header):** wavenumber labels (first cell is ignored).
 - **Column 0:** sample names — included in the response as `sample`.
-- **Remaining cells:** spectral intensities, exactly **2151 columns** (wavelengths 350–2500 nm, 1 nm step).
+- **Remaining cells:** raw reflectance (0–1), exactly **2151 columns** (wavelengths 350–2500 nm, 1 nm step).
 
-**`raw_reflectance` query parameter:**
-- `false` (default): values are already pseudo-absorbance `log(1/R)`.
-- `true`: values are raw reflectance (0–1); `log(1/R)` is applied automatically.
-  Values ≤ 0 are clipped to 1e-6 and reported in `warnings`.
+Non-positive values are clipped to 1e-6 and reported in `warnings`.
 
 Returns one prediction per spectrum, the total sample count, and any clipping warnings.
 """,
 )
 async def predict_rf_csv(
     file: UploadFile = File(...),
-    raw_reflectance: bool = False,
 ) -> BatchPredictionResponse:
     X, names = _parse_csv(await file.read())
-    warnings = []
-    if raw_reflectance:
-        X, warnings = _to_absorbance(X, names)
+    X, warnings = _clip_reflectance(X, names)
     return _predict_batch("rf", X, names, warnings)
 
 
