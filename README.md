@@ -14,8 +14,8 @@ The notebook implements the full pipeline — from raw reflectance spectra to co
 |---|---|---|
 | `NIR_Collagen_Prediction.ipynb` | Main analysis notebook | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Gnpd/NIR-Collagen-Prediction/blob/main/NIR_Collagen_Prediction.ipynb) |
 | `1-s2.0-S0305440325002973-mmc2.csv` | Supplementary data from the paper (176 samples, 2151 wavelengths) | |
-| `plsr_2045.json` | Serialized PLSR model — SG preprocessing, 2030–2060 nm range, 1 component | |
-| `rf_2045.json` | Serialized RandomForest model — SG preprocessing, 2030–2060 nm range | |
+| `plsr_2045.json` | Serialized PLSR pipeline — IntensityConversion → SG → RangeCut(2030–2060 nm) → PLSRegression | |
+| `rf_2045.json` | Serialized Random Forest pipeline — IntensityConversion → SG → RangeCut(2030–2060 nm) → RandomForestRegressor | |
 
 ---
 
@@ -123,7 +123,24 @@ The API accepts spectra as JSON (single or batch) or as a CSV file upload, and s
 
 ## Key Results Reproduced
 
-- The 2030–2060 nm range delivers the best balance between parsimony and accuracy (1 PLSR factor, Val R² ≈ 0.88, Val RMSE ≈ 1.78%).
-- Restricting the spectral range to 2030–2060 nm avoids PVA consolidant absorption wavelengths (2135, 2250, 2296 nm), making the model robust for archaeological collections.
-- Random Forest (780–2500 nm) achieves the lowest LOO-CV RMSE (≈ 1.35%) but requires the full spectral range.
+**PLSR model performance across wavelength ranges** (100-sample calibration / 40-sample validation split):
+
+| Range | Factors | Val R² | Val RMSE |
+|---|---|---|---|
+| 2030–2060 nm (preferred) | 1 | 0.876 | 1.78% |
+| 2030–2060 + 2244–2300 nm | 3 | 0.890 | 1.67% |
+| 2000–2300 nm | 3 | 0.883 | 1.73% |
+| 780–2500 nm (full NIR) | 3 | 0.862 | 1.88% |
+
+**Combined models — Leave-One-Out CV (all 140 reference samples):**
+
+| Model | LOO-CV R² | LOO-CV RMSE |
+|---|---|---|
+| PLSR 2030–2060 nm | 0.883 | 1.62% |
+| RF 2030–2060 nm | 0.894 | 1.54% |
+| RF 780–2500 nm | 0.919 | 1.35% |
+
+- The 2030–2060 nm range (1 PLSR factor, 31 features) delivers the best balance between parsimony and predictive accuracy — the preferred model for deployment.
+- Restricting the spectral range to 2030–2060 nm avoids PVA consolidant absorption bands at 2135, 2250, and 2296 nm, making the model robust for museum collections.
+- Random Forest (780–2500 nm) achieves the lowest LOO-CV RMSE (1.35%) but requires the full spectral range and is more sensitive to consolidant contamination.
 
